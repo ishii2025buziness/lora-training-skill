@@ -46,9 +46,19 @@ print(f"ComfyUI LoRA name: {lora_filename}")
 
 ## Individual Functions
 
-### `prepare_dataset(name, image_dir, trigger_word, caption_tags=None)`
+### `prepare_dataset(name, image_dir, trigger_word, caption_tags=None, repeat=10)`
 
 ローカルの画像を K12 にアップロードし、キャプションファイルを生成する。
+sd-scripts が要求する `{repeat}_{trigger_word}/` サブフォルダ構造を自動作成する。
+
+K12 上のディレクトリ構造:
+```
+/home/kento/lora-training/datasets/{name}/
+    {repeat}_{trigger_word}/
+        image1.png
+        image1.txt
+        ...
+```
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
@@ -56,6 +66,7 @@ print(f"ComfyUI LoRA name: {lora_filename}")
 | `image_dir` | str | required | ローカルの画像ディレクトリパス |
 | `trigger_word` | str | required | トリガーワード |
 | `caption_tags` | str | None | 追加タグ (カンマ区切り)。None の場合 trigger_word のみ |
+| `repeat` | int | 10 | リピート回数 (サブフォルダ名に使用) |
 
 Returns: `int` — アップロードした画像数
 
@@ -105,7 +116,7 @@ Returns: `str` — ステータス情報
 
 Returns: `str` — ComfyUI で参照する LoRA ファイル名
 
-### `train_lora(name, image_dir, trigger_word, caption_tags=None, dim=16, epochs=15, batch_size=2)`
+### `train_lora(name, image_dir, trigger_word, caption_tags=None, repeat=10, dim=16, epochs=15, batch_size=2)`
 
 `prepare_dataset` → `create_config` → `submit_job` を順に実行する便利関数。
 
@@ -115,6 +126,7 @@ Returns: `str` — ComfyUI で参照する LoRA ファイル名
 | `image_dir` | str | required | ローカルの画像ディレクトリパス |
 | `trigger_word` | str | required | トリガーワード |
 | `caption_tags` | str | None | 追加タグ |
+| `repeat` | int | 10 | リピート回数 |
 | `dim` | int | 16 | LoRA rank |
 | `epochs` | int | 15 | エポック数 |
 | `batch_size` | int | 2 | バッチサイズ |

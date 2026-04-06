@@ -50,14 +50,29 @@ def prepare_dataset(
     image_dir: str,
     trigger_word: str,
     caption_tags: str | None = None,
+    repeat: int = 10,
 ) -> int:
     """Copy images to K12 and generate caption .txt files.
+
+    sd-scripts requires ``train_data_dir`` to be a **parent** directory
+    containing subfolders named ``{repeat}_{concept}/``.  This function
+    creates the subfolder ``{repeat}_{trigger_word}/`` inside the dataset
+    directory and places images + captions there.
+
+    Remote structure created::
+
+        /home/kento/lora-training/datasets/{name}/
+            {repeat}_{trigger_word}/
+                image1.png
+                image1.txt
+                ...
 
     Args:
         name: Dataset name (used as directory name on K12).
         image_dir: Local directory containing training images.
         trigger_word: Trigger word for the LoRA.
         caption_tags: Optional comma-separated tags appended after trigger_word.
+        repeat: Number of repeats (encoded in subfolder name, default 10).
 
     Returns:
         Number of images prepared.
@@ -82,28 +97,35 @@ def prepare_dataset(
     if caption_tags:
         caption = f"{trigger_word}, {caption_tags}"
 
+    # sd-scripts subfolder name: {repeat}_{trigger_word}
+    subset_folder = f"{repeat}_{trigger_word}"
+
     # Create caption files locally in a temp dir, then scp everything
     with tempfile.TemporaryDirectory(prefix="lora_ds_") as tmpdir:
+        # Mirror the subfolder structure locally
+        local_subset = os.path.join(tmpdir, subset_folder)
+        os.makedirs(local_subset)
+
         for img in images:
-            # Copy image to tmpdir
-            dst_img = os.path.join(tmpdir, img.name)
+            # Copy image to local subset dir
+            dst_img = os.path.join(local_subset, img.name)
             os.link(img, dst_img) if os.stat(img).st_dev == os.stat(tmpdir).st_dev else __import__("shutil").copy2(str(img), dst_img)
 
             # Create matching .txt caption
             txt_name = img.stem + ".txt"
-            with open(os.path.join(tmpdir, txt_name), "w") as f:
+            with open(os.path.join(local_subset, txt_name), "w") as f:
                 f.write(caption)
 
-        # Ensure remote directory exists
+        # Ensure remote parent directory exists
         remote_dir = f"{K12_DATASET_BASE}/{name}"
-        print(f"[prepare_dataset] Creating remote directory: {remote_dir}")
-        _run(["ssh", K12_HOST, "mkdir", "-p", remote_dir])
+        print(f"[prepare_dataset] Creating remote directory: {remote_dir}/{subset_folder}/")
+        _run(["ssh", K12_HOST, "mkdir", "-p", f"{remote_dir}/{subset_folder}"])
 
-        # scp all files
-        print(f"[prepare_dataset] Uploading {len(images)} images + captions to {K12_HOST}:{remote_dir}/")
-        _run(["scp", "-r"] + glob.glob(os.path.join(tmpdir, "*")) + [f"{K12_HOST}:{remote_dir}/"])
+        # scp the subset folder contents
+        print(f"[prepare_dataset] Uploading {len(images)} images + captions to {K12_HOST}:{remote_dir}/{subset_folder}/")
+        _run(["scp", "-r"] + glob.glob(os.path.join(local_subset, "*")) + [f"{K12_HOST}:{remote_dir}/{subset_folder}/"])
 
-    print(f"[prepare_dataset] Done. {len(images)} images prepared for '{name}'.")
+    print(f"[prepare_dataset] Done. {len(images)} images prepared in {remote_dir}/{subset_folder}/")
     return len(images)
 
 
@@ -140,15 +162,12 @@ v_parameterization = true
 zero_terminal_snr = true
 
 [dataset_arguments]
+train_data_dir = "{K12_DATASET_BASE}/{name}"
 resolution = [1024, 1024]
 enable_bucket = true
 min_bucket_reso = 512
 max_bucket_reso = 2048
 bucket_reso_steps = 64
-
-[[dataset_arguments.subsets]]
-image_dir = "{K12_DATASET_BASE}/{name}"
-num_repeats = 10
 caption_extension = ".txt"
 
 [training_arguments]
@@ -395,6 +414,7 @@ def train_lora(
     image_dir: str,
     trigger_word: str,
     caption_tags: str | None = None,
+    repeat: int = 10,
     dim: int = 16,
     epochs: int = 15,
     batch_size: int = 2,
@@ -406,6 +426,7 @@ def train_lora(
         image_dir: Local directory containing training images.
         trigger_word: Trigger word for the LoRA.
         caption_tags: Optional comma-separated tags.
+        repeat: Number of repeats (encoded in dataset subfolder name, default 10).
         dim: LoRA rank dimension.
         epochs: Number of training epochs.
         batch_size: Training batch size.
@@ -418,7 +439,7 @@ def train_lora(
 
     # Step 1: Prepare dataset
     print("\n--- Step 1/3: Prepare Dataset ---")
-    count = prepare_dataset(name, image_dir, trigger_word, caption_tags)
+    count = prepare_dataset(name, image_dir, trigger_word, caption_tags, repeat=repeat)
     print(f"  Images prepared: {count}")
 
     # Step 2: Create config
