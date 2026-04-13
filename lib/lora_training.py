@@ -268,16 +268,17 @@ spec:
         training-name: {name}
     spec:
       restartPolicy: Never
+      runtimeClassName: nvidia
       containers:
         - name: trainer
           image: {DOCKER_IMAGE}
           imagePullPolicy: Never
-          command:
-            - python
-            - -m
-            - sdxl_train_network
-            - --config_file
-            - /config/{config_filename}
+          command: ["sh", "-c"]
+          args:
+            - |
+              set -e
+              python -c 'import torch; assert torch.cuda.is_available(), "REFUSING TO TRAIN: CUDA not available in this pod (GPU injection failed). Check runtimeClassName=nvidia and nvidia-device-plugin."; print(f"CUDA OK: {{torch.cuda.device_count()}} device(s), {{torch.cuda.get_device_name(0)}}")'
+              exec python -m sdxl_train_network --config_file /config/{config_filename}
           resources:
             requests:
               memory: "12Gi"
@@ -297,6 +298,8 @@ spec:
               readOnly: true
             - name: output
               mountPath: {K12_OUTPUT_DIR}
+            - name: dshm
+              mountPath: /dev/shm
       volumes:
         - name: checkpoints
           hostPath:
@@ -314,6 +317,10 @@ spec:
           hostPath:
             path: {K12_OUTPUT_DIR}
             type: DirectoryOrCreate
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 4Gi
 """
 
     with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", prefix="lora_job_", delete=False) as f:
