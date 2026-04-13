@@ -163,7 +163,7 @@ zero_terminal_snr = true
 
 [dataset_arguments]
 train_data_dir = "{K12_DATASET_BASE}/{name}"
-resolution = [1024, 1024]
+resolution = "1024,1024"
 enable_bucket = true
 min_bucket_reso = 512
 max_bucket_reso = 2048
@@ -192,7 +192,7 @@ logging_dir = "{K12_OUTPUT_DIR}/logs"
 log_prefix = "{name}"
 sample_sampler = "euler"
 sample_every_n_epochs = 5
-sample_prompts = "{K12_CONFIG_DIR}/{sample_filename}"
+sample_prompts = "/config/{sample_filename}"
 
 [optimizer_arguments]
 optimizer_type = "Prodigy"
